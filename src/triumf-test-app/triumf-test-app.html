@@ -1,0 +1,268 @@
+<link rel="import"
+      href="../../bower_components/polymer/polymer-element.html">
+<link rel="import"
+      href="../../bower_components/paper-button/paper-button.html">
+<link rel="import"
+      href="../../bower_components/paper-dropdown-menu/paper-dropdown-menu.html">
+<link rel="import"
+      href="../../bower_components/paper-listbox/paper-listbox.html">
+<link rel="import"
+      href="../../bower_components/paper-item/paper-item.html">
+
+<script src="d3.v3.min.js"></script>
+
+<dom-module id="triumf-test-app">
+  <template>
+    <style>
+       :host {
+        display: block;
+      }
+
+      .axis path,
+      .axis line {
+        fill: none;
+        stroke: #333;
+      }
+
+      .axis .grid-line {
+        stroke: #000;
+        stroke-opacity: 0.2;
+      }
+
+      .axis text {
+        font: 10px Verdana;
+      }
+    </style>
+
+    <paper-button raised
+                  on-tap="week">Week</paper-button>
+    <paper-button raised
+                  on-tap="month">Month</paper-button>
+    <paper-button raised
+                  on-tap="quarter">Quarter</paper-button>
+    <paper-button raised
+                  on-tap="year">Year</paper-button>
+    <paper-button raised
+                  on-tap="max">Max</paper-button>
+    <paper-dropdown-menu label="Type data">
+      <paper-listbox slot="dropdown-content"
+                     selected="{{type}}">
+        <paper-item>Yield</paper-item>
+        <paper-item>Spread</paper-item>
+        <paper-item>Price</paper-item>
+      </paper-listbox>
+    </paper-dropdown-menu>
+
+    <div id="chart"></div>
+
+  </template>
+
+  <script>
+    class TriumfTestApp extends Polymer.Element {
+
+      static get is() { return 'triumf-test-app'; }
+
+      static get properties() {
+        return {
+          data: Array,
+          type: {
+            value: 0,
+            observer: 'typeChange'
+          },
+          start: {
+            value: new Date(2016, 0, 1)
+          },
+          end: {
+            value: new Date(2016, 0, 7)
+          }
+        };
+      }
+
+      ready() {
+        super.ready();
+        this.drawChart();
+      }
+
+      drawChart() {
+
+        var height = 500,
+          width = 500,
+          margin = 75,
+          rawData = this.generateData(),
+          data = [];
+
+        d3.select(this.$.chart).select('*').remove();
+
+        // создание объекта svg
+        var svg = d3.select(this.$.chart)
+          .append("svg")
+          .attr("class", "axis")
+          .attr("width", width)
+          .attr("height", height);
+
+        // длина оси X= ширина контейнера svg - отступ слева и справа
+        var xAxisLength = width - 2 * margin;
+
+        // длина оси Y = высота контейнера svg - отступ сверху и снизу
+        var yAxisLength = height - 2 * margin;
+
+        // функция интерполяции значений на ось Х  
+        var scaleX = d3.time.scale()
+          .domain([this.start, this.end])
+          .range([0, xAxisLength]);
+
+        // функция интерполяции значений на ось Y
+        var maxValue = 0;
+
+        rawData.forEach(function (elem) {
+          switch (this.type) {
+            case 2:
+              if (elem.price > maxValue) maxValue = elem.price;
+              break;
+            case 1:
+              if (elem.spread > maxValue) maxValue = elem.spread;
+              break;
+            case 0:
+            default:
+              if (elem.yield > maxValue) maxValue = elem.yield;
+              break;
+          }
+
+        }.bind(this));
+
+        var scaleY = d3.scale.linear()
+          .domain([Math.round(maxValue), 0])
+          .range([0, yAxisLength]);
+
+        var y;
+
+        switch (this.type) {
+          case 2:
+              y = 'price';
+              break;
+            case 1:
+              y = 'spread';
+              break;
+            case 0:
+            default:
+              y = 'yield';
+              break;
+        }  
+
+        // масштабирование реальных данных в данные для нашей координатной системы
+        for (var i = 0; i < rawData.length; i++)
+          data.push({ 
+            x: scaleX(rawData[i].date) + margin, 
+            y: scaleY(rawData[i][y]) + margin 
+          });
+
+        // создаем ось X   
+        var xAxis = d3.svg.axis()
+          .scale(scaleX)
+          .orient("bottom");
+
+        // создаем ось Y             
+        var yAxis = d3.svg.axis()
+          .scale(scaleY)
+          .orient("left");
+
+        // отрисовка оси Х             
+        svg.append("g")
+          .attr("class", "x-axis")
+          .attr("transform",  // сдвиг оси вниз и вправо
+          "translate(" + margin + "," + (height - margin) + ")")
+          .call(xAxis);
+
+        // отрисовка оси Y 
+        svg.append("g")
+          .attr("class", "y-axis")
+          .attr("transform", // сдвиг оси вниз и вправо на margin
+          "translate(" + margin + "," + margin + ")")
+          .call(yAxis);
+
+        // создаем набор вертикальных линий для сетки   
+        d3.select(this.$.chart).selectAll("g.x-axis g.tick")
+          .append("line")
+          .classed("grid-line", true)
+          .attr("x1", 0)
+          .attr("y1", 0)
+          .attr("x2", 0)
+          .attr("y2", - (yAxisLength));
+
+        // рисуем горизонтальные линии координатной сетки
+        d3.select(this.$.chart).selectAll("g.y-axis g.tick")
+          .append("line")
+          .classed("grid-line", true)
+          .attr("x1", 0)
+          .attr("y1", 0)
+          .attr("x2", xAxisLength)
+          .attr("y2", 0);
+
+        d3.select(this.$.chart).selectAll(".x-axis text")  // select all the text elements for the xaxis
+          .attr("transform", function (d) {
+            return "translate(" + (this.getBBox().height - 24) + "," + (this.getBBox().height + 25) + ")rotate(-90)";
+          });
+
+        // функция, создающая по массиву точек линии
+        var line = d3.svg.line()
+          .x(function (d) { return d.x; })
+          .y(function (d) { return d.y; });
+
+        // добавляем путь
+        svg.append("g").append("path")
+          .attr("d", line(data))
+          .style("stroke", "steelblue")
+          .style("stroke-width", 2);
+      }
+
+      generateData() {
+        var data = [];
+
+        var delta = Math.round((this.end - this.start) / 1000 / 60 / 60 / 24);
+
+        for (var i = 0; i <= delta; i++) {
+          data.push({
+            date: new Date(new Date(this.start).setDate(this.start.getDate() + i)),
+            yield: Math.random() * 100,
+            spread: Math.random() * 10,
+            price: Math.random() * 1500,
+          });
+        }
+
+        return data;
+      }
+
+      week() {
+        this.start = new Date(2016, 0, 1);
+        this.end = new Date(2016, 0, 7);
+        this.drawChart();
+      }
+      month() {
+        this.start = new Date(2016, 0, 1);
+        this.end = new Date(2016, 0, 31);
+        this.drawChart();
+      }
+      quarter() {
+        this.start = new Date(2016, 0, 1);
+        this.end = new Date(2016, 3, 30);
+        this.drawChart();
+      }
+      year() {
+        this.start = new Date(2016, 0, 1);
+        this.end = new Date(2016, 11, 31);
+        this.drawChart();
+      }
+      max() {
+        this.start = new Date(2000, 0, 1);
+        this.end = new Date(2016, 11, 31);
+        this.drawChart();
+      }
+
+      typeChange() {
+        this.drawChart();
+      }
+    }
+
+    window.customElements.define(TriumfTestApp.is, TriumfTestApp);
+  </script>
+</dom-module>

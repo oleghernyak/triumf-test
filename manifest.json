@@ -1,0 +1,6 @@
+{
+  "name": "triumf-test",
+  "short_name": "triumf-test",
+  "start_url": "/",
+  "display": "standalone"
+}
